@@ -1,0 +1,13 @@
+fatta patch nel file 
+
+wifi_interface.c, per la decodifica da browser
+     /* Set automatic decoding */  //patch
+   status = SET_Configuration_Value(WIFI_IP_USE_DECODER,2);
+   if(status != WiFi_MODULE_SUCCESS)
+    return WiFi_CONFIG_ERROR;  
+
+aggiunta define in 
+
+wifi_const.h
+
+#define WIFI_IP_USE_DECODER                     "ip_use_decoder"  
