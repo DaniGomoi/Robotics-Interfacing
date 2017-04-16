@@ -90,9 +90,9 @@ uint8_t VNI_TxRx(uint8_t OutputStage);
 void Parity_bits_VNI(void);
 void PLC_TIM2_Init(void);
 void Calc_TimParam (void);
-char*   GET_VNI_OutFB(uint8_t Out_index );
-char* GET_VNI_FB( uint8_t Out_index);
-char* GET_CLT_FB( uint8_t Out_index);
+void GET_VNI_OutFB(uint8_t Out_index );
+void GET_VNI_FB( uint8_t Out_index);
+void GET_CLT_FB( uint8_t Out_index);
 /**
   * @}// end 
   */
