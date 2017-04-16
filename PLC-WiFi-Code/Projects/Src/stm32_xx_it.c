@@ -48,7 +48,7 @@
 #include "stm32_spwf_wifi.h" 
 #include "Ladder_Lib.h"
 #include "stm32f4xx_hal.h"
-
+#include "PLC_Handling.h"
 
 
 #define SLEEP_RESUME_PREVENT    2000
@@ -70,12 +70,8 @@ uint8_t WD_Refresh=0;
 uint16_t npolling=0;
 uint8_t fault_tick=0;
 uint8_t refresh=0;
-extern uint8_t index_c;
-extern uint16_t delay_CNT[];
-extern int8_t POG;
 
-//extern uint8_t timer_1,timer_2;
-extern uint16_t cnt1[],cnt4;
+
 /**
   * @} // End Interrupt_Private_Variables 
   */
@@ -98,11 +94,17 @@ extern bool polling;
 extern bool RX_ClientFrame;
 extern uint32_t sleep_count;
 extern uint16_t WD_Reset;
-extern TimerStruct_Typedef   tim_setting[MAX_TIM_PARAM];
+extern TimerStruct_Typedef   tim_setting[MAX_COMPONENT_NUMBER];
 extern BOARD_Typedef Board_State;
 extern uint8_t timer1_cnt;
 extern uint8_t timer2_cnt;
 extern uint8_t cnt1TH,cnt2TH;
+extern uint8_t start_delay[];
+extern uint8_t index_c;
+extern uint16_t delay_CNT[];
+extern int8_t POG;
+extern uint16_t cnt1[],cnt4;
+extern uint8_t htim4_idx,htim1_idx;
 /**
   * @} // End Interrupt_Exported_Variables 
   */
@@ -121,7 +123,7 @@ extern CLT_CheckState_Typedef CLT_State;
 extern wifi_state_t wifi_state;                         /*!< wifi status variable    */
 extern Decode_Status_Typedef Frame_decoding;            /*!< frame decoding variable */
 extern BOARD_Typedef Board_State;                       /*!< state machine variable  */
-extern TimerStruct_Typedef  tim_setting[MAX_TIM_PARAM];
+extern TimerStruct_Typedef  tim_setting[MAX_COMPONENT_NUMBER];
 extern TIM_HandleTypeDef htim2,htim1,htim,htim4;
 /**
   * @} // End Interrupt_Exported_Typedef 
@@ -133,7 +135,7 @@ extern TIM_HandleTypeDef htim2,htim1,htim,htim4;
 
 /* Private define ------------------------------------------------------------*/
 #define listening_time 2000 //ms   
-#define loop_time 200//10000
+#define loop_time 20//10000
 
 /**
   * @} // End Interrupt_Private_Define 
@@ -260,32 +262,32 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
    
         if(htim==&htim1)
         {
-          if(cnt1[0]==cnt1TH)
+          if(cnt1[htim1_idx]>=cnt1TH)
             {
-              if((POG!=1)&&(Board_State!=BOARD_LISTENING))
-              {
-                PLC_Polling();
-              }
+//              if((POG!=1)&&(Board_State!=BOARD_LISTENING))
+//              {
+//                PLC_Polling();
+//              }
               timer1_cnt=1;
             }
             else
-              cnt1[0]++; 
+              cnt1[htim1_idx]++; 
 
         }
         else
         {
           if(htim==&htim4)
           { 
-            if(cnt1[1]==cnt2TH)
+            if(cnt1[htim4_idx]>=cnt2TH)
             {
-              if((POG!=1)&&(Board_State!=BOARD_LISTENING))
-              {
-                PLC_Polling();
-              }
+//              if((POG!=1)&&(Board_State!=BOARD_LISTENING))
+//              {
+//                PLC_Polling();
+//              }
               timer2_cnt=1;
             }
             else
-              cnt1[1]++; 
+              cnt1[htim4_idx]++; 
 
           }
           else
@@ -326,15 +328,16 @@ void TIM2_IRQHandler(void)
 void SysTick_Handler(void)
 {
   /******** PLC ***********/
-  if(counter_up[0].CNT_val!=0)
-     delay_CNT[0]++;
-  if(counter_up[1].CNT_val!=0)
-    delay_CNT[1]++;
-  if(counter_up[2].CNT_val!=0)
-    delay_CNT[2]++;
-  if(counter_up[3].CNT_val!=0)
-    delay_CNT[3]++;
-    
+  do{
+      if((counter_up[index_c].CNT_val!=0)&&(start_delay[index_c]==1))
+      {
+        delay_CNT[index_c]++;
+      }
+      index_c++;
+    }while(index_c<MAX_COMPONENT_NUMBER);
+    index_c=0;
+
+#if (defined PLC01A1_OUT01A1) ||   (defined PLC01A1)  
     
     if(WD_Reset>100)
     {
@@ -355,56 +358,54 @@ void SysTick_Handler(void)
     {
       WD_Refresh++;      
     }
-     
+    
+    if(POG!=1)
+    {
+    
       if(Board_State==BOARD_LOOP)
-      {
-        
-        //while(npolling==802);
-        if(npolling>=loop_time)
-         { 
-           if(Frame_decoding==Completed)
-           {
-            Board_State=BOARD_LISTENING; 
-
-            Query_CLT=0;
-            CLT_READ=0;
-            npolling=0;
-            
-            }
-           
-         }
-        else
-        {     CLT_READ=1;
-//         if(Query_CLT>=10)
-//            {
-//              Query_CLT=0;
-//              CLT_READ=1;
-//            }
-//           else
-//           {
-//             Query_CLT++;
-//
-//           }
-            npolling++;
+      {               
+        PLC_Polling ();
+        POG=-1;
+      }
+      else
+      {   
+        if((Board_State==BOARD_LISTENING)||(Get_FlagStatus()==1))
+        {  
+          //        if(POG!=1)
+          PLC_Polling();
+          POG=-1;
         }
       }
+    }
     else
-     {  
-       if((Board_State==BOARD_LISTENING)&&(Get_FlagStatus()!=1))
-        {
-          if(npolling>=listening_time)
-            {              
-               if(wifi_state==wifi_state_idle)
-               {
-               Board_State=BOARD_LOOP;
-               
-               npolling=0;
-               }              
-            } 
-          else
-            npolling++;  
+    {
+   
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET); //CS pin
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//CS1 watchdog refresh
+   
+    }    
+#elif (defined OUT01A1)
+
+      if(POG!=1)
+      {
+        
+        if(Board_State==BOARD_LOOP)
+        {               
+          PLC_Polling ();
+          POG=-1;
         }
-     }//prova
+        else
+        {   
+          if((Board_State==BOARD_LISTENING)||(Get_FlagStatus()==1))
+          {  
+            //        if(POG!=1)
+            PLC_Polling();
+            POG=-1;
+          }
+        }
+      }
+
+#endif
   HAL_IncTick();
  Wifi_SysTick_Isr();
 }

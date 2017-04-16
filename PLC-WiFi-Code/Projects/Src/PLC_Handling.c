@@ -130,7 +130,8 @@ extern PLC_State_TypeDef PLC_State;
 extern CLT_CheckState_Typedef CLT_State;
 extern uint8_t output_status;
 extern uint8_t output_buffer;
-
+extern volatile uint16_t Array_Index;
+extern char FB_ARRAY[300];
 /**
   * @} //End X_Nucleo_PLC Handling Exported variable
   */
@@ -141,20 +142,9 @@ extern uint8_t output_buffer;
   * @brief    
   * @{ 
   */
-//
-//void Calc_TimParam (void)
-//{
-//  Tim_Setting.Timer_freq=OUTPUT_CYCLING_FREQ;
-//  Tim_Setting.Timer_Prescaler=1000;
-//  Tim_Setting.Timer_Period=(64000000/(Tim_Setting.Timer_freq*Tim_Setting.Timer_Prescaler))-1;
-//  Tim_Setting.Timer_Duty=((Tim_Setting.Timer_Period+1)*OUTPUT_CYCLING_DUTY)/100;
-//
-//}
-
-
-    
+ 
 /** 
-  * @brief: Read CLT input status
+  * @brief: Read CLT01 input status
   * @param: None
   * @retval: CLT buffer
 */
@@ -171,7 +161,7 @@ return ret_CLT;
 
 
 /** 
-  * @brief:     Read CLT input status
+  * @brief:     Read VNI8200XP input status
   * @param:     Output stage sonfiguration
   * @retval:    VNI fault byte
 */
@@ -202,169 +192,214 @@ var1=ret_byte[0];
   return ret_VNI;
 }
 
+/** 
+  * @brief:     Get VNI8200XP ouput status
+  * @param:     Output index
+*/
 
-char* GET_VNI_OutFB(uint8_t Out_index )
+void GET_VNI_OutFB(uint8_t Out_index )
 {
 
   uint8_t VNI_Feedback=0;
-  char* condition=NULL; 
- char* str_data=NULL;
 
        output_prog=(FB_Data[0]>>Out_index)&0x01;
+//       output_prog=1;//TEST
          if(output_prog==1)
          {              
            VNI_Feedback=(FB_Data[2]>>Out_index)&0x01; 
+//           VNI_Feedback=1;//TEST
             if(VNI_Feedback==0)
             {
               switch (Out_index)
               {
               case 0:
-                condition="CHANNEL 1 OK";
-               str_data=condition;
+                FB_ARRAY[Array_Index+8]='1';
                 break;
               case 1:
-                condition="CHANNEL 2 OK";
-                str_data=condition;    
+                FB_ARRAY[Array_Index+8] = '2';
                 break;
               case 2:
-                condition="CHANNEL 3 OK";
-                str_data=condition;
+                FB_ARRAY[Array_Index+8] = '3';
                 break;
               case 3:
-                condition="CHANNEL 4 OK";
-                
-               str_data=condition;
+                FB_ARRAY[Array_Index+8] = '4';
                 break;
               case 4:
-                condition="CHANNEL 5 OK";
-                str_data=condition;
+                FB_ARRAY[Array_Index+8] = '5';
                 break;
                 case 5:
-                  condition="CHANNEL 6 OK";
-                str_data=condition;
+                  FB_ARRAY[Array_Index+8] = '6';
                 break;
               case 6:
-                condition="CHANNEL 7 OK";
-                str_data=condition;    
+                FB_ARRAY[Array_Index+8] = '7';
                 break;
               case 7:
-                condition="CHANNEL 8 OK";
-               str_data=condition;
+                FB_ARRAY[Array_Index+8] = '8';
                 break;
               }
+              FB_ARRAY[Array_Index+9] = ' ';
+              FB_ARRAY[Array_Index+10] = 'O';
+              FB_ARRAY[Array_Index+11] = 'N';
+              FB_ARRAY[Array_Index+12] = '\r';
+              FB_ARRAY[Array_Index+13] = '\n';
+              Array_Index+=14;
             }
-            else
+            else if(VNI_Feedback==1)
             {
               switch (Out_index)
               {
                 case 0:
-                condition="CHANNEL 1 FAIL";
-                str_data=condition;;
+              
+                FB_ARRAY[Array_Index+8]='1';
+
                 break;
               case 1:
-                condition="CHANNEL 2 FAIL";
-               str_data=condition;    
+                FB_ARRAY[Array_Index+8] = '2';
                 break;
               case 2:
-                condition="CHANNEL 3 FAIL";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+8] = '3';
                 break;
               case 3:
-                condition="CHANNEL 4 FAIL";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+8] = '4';
                 break;
               case 4:
-                condition="CHANNEL 5 FAIL";
-               str_data=condition;;
+                FB_ARRAY[Array_Index+8] = '5';
                 break;
                 case 5:
-                  condition="CHANNEL 6 FAIL";
-                str_data[Out_index]=*condition;
+                  FB_ARRAY[Array_Index+8] = '6';
                 break;
               case 6:
-                condition="CHANNEL 7 FAIL";
-                str_data=condition;;    
+                FB_ARRAY[Array_Index+8] = '7';
+  
                 break;
               case 7:
-                condition="CHANNEL 8 FAIL";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+8] = '8';
+
                 break;
               }
-              
+              FB_ARRAY[Array_Index+9] = ' ';
+              FB_ARRAY[Array_Index+10] = 'F';
+              FB_ARRAY[Array_Index+11] = 'A';
+              FB_ARRAY[Array_Index+12] = 'I';
+              FB_ARRAY[Array_Index+13] = 'L';
+              FB_ARRAY[Array_Index+14] = '\r';
+              FB_ARRAY[Array_Index+15] = '\n';
+              Array_Index+=16;
             }
           
          }
-         else
+         else if(output_prog==0)
          {
-           switch (Out_index)
+              switch (Out_index)
               {
-              case 0:
-                condition="CHANNEL 1 OFF";
-               str_data=condition;
+                case 0:
+                FB_ARRAY[Array_Index+8]='1';
                 break;
               case 1:
-                condition="CHANNEL 2 OFF";
-                str_data=condition;    
+                FB_ARRAY[Array_Index+8] = '2';
                 break;
               case 2:
-                condition="CHANNEL 3 OFF";
-                str_data=condition;
+                FB_ARRAY[Array_Index+8] = '3';
                 break;
               case 3:
-                condition="CHANNEL 4 OFF";
-                
-               str_data=condition;
+                FB_ARRAY[Array_Index+8] = '4';
                 break;
               case 4:
-                condition="CHANNEL 5 OFF";
-                str_data=condition;
+                FB_ARRAY[Array_Index+8] = '5';
                 break;
                 case 5:
-                  condition="CHANNEL 6 OFF";
-                str_data=condition;
+                  FB_ARRAY[Array_Index+8] = '6';
                 break;
               case 6:
-                condition="CHANNEL 7 OFF";
-                str_data=condition;    
+                FB_ARRAY[Array_Index+8] = '7';
                 break;
               case 7:
-                condition="CHANNEL 8 OFF";
-               str_data=condition;
+                FB_ARRAY[Array_Index+8] = '8';
                 break;
               }
-           
-           
-           
+           FB_ARRAY[Array_Index+9] = ' ';
+           FB_ARRAY[Array_Index+10] = 'O';
+           FB_ARRAY[Array_Index+11] = 'F';
+           FB_ARRAY[Array_Index+12] = 'F';           
+           FB_ARRAY[Array_Index+13] = '\r';
+           FB_ARRAY[Array_Index+14] = '\n';
+           Array_Index+=15;
          }
-  return str_data;
+
 }
 
-char* GET_VNI_FB( uint8_t Out_index)
+
+
+/** 
+  * @brief:     Get VNI8200XP IC status
+  * @param:     Output index
+*/
+
+void GET_VNI_FB( uint8_t Out_index)
 {
- 
-    char* condition=NULL;
-    char* str_data=NULL;
+
                
            device_FB=(FB_Data[1]>>Out_index)&0x01; 
+//       device_FB=0;//TEST
             if(device_FB==0)
             {
               switch (Out_index)
               {
               case 4:
-                 condition="POWER GOOD OK";
-                str_data=condition;
+                FB_ARRAY[Array_Index+0] = 'P';
+                FB_ARRAY[Array_Index+1] = 'O';
+                FB_ARRAY[Array_Index+2] = 'W';
+                FB_ARRAY[Array_Index+3] = 'E';           
+                FB_ARRAY[Array_Index+4] = 'R';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'G';
+                FB_ARRAY[Array_Index+7] = 'O';
+                FB_ARRAY[Array_Index+8] = 'O';
+                FB_ARRAY[Array_Index+9] = 'D';           
+                FB_ARRAY[Array_Index+10] = ' ';
+                FB_ARRAY[Array_Index+11] = 'O';
+                FB_ARRAY[Array_Index+12] = 'K'; 
+                FB_ARRAY[Array_Index+13] = '\r';
+                FB_ARRAY[Array_Index+14] = '\n'; 
+                Array_Index+=15;
                 break;
-              case 5:                
-               condition="PC OK";
-                str_data=condition;
+              case 5:       
+                FB_ARRAY[Array_Index+0] = 'P';
+                FB_ARRAY[Array_Index+1] = 'C';           
+                FB_ARRAY[Array_Index+2] = ' ';
+                FB_ARRAY[Array_Index+3] = 'O';
+                FB_ARRAY[Array_Index+4] = 'K'; 
+                FB_ARRAY[Array_Index+5] = '\r';
+                FB_ARRAY[Array_Index+6] = '\n';
+                Array_Index+=7;
                 break;
               case 6:
-                 condition="TWARN OK";  
-                str_data=condition;;
+                FB_ARRAY[Array_Index+0] = 'T';
+                FB_ARRAY[Array_Index+1] = 'W';           
+                FB_ARRAY[Array_Index+2] = 'A';
+                FB_ARRAY[Array_Index+3] = 'R';
+                FB_ARRAY[Array_Index+4] = 'N';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'O';
+                FB_ARRAY[Array_Index+7] = 'K';
+                FB_ARRAY[Array_Index+8] = '\r';
+                FB_ARRAY[Array_Index+9] = '\n';
+                 Array_Index+=10;
                 break;
               case 7:
-               condition="DC/DC FAIL";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+0] = 'D';
+                FB_ARRAY[Array_Index+1] = 'C';           
+                FB_ARRAY[Array_Index+2] = '/';
+                FB_ARRAY[Array_Index+3] = 'D';
+                FB_ARRAY[Array_Index+4] = 'C';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'F';
+                FB_ARRAY[Array_Index+7] = 'A';
+                FB_ARRAY[Array_Index+8] = 'I';
+                FB_ARRAY[Array_Index+9] = 'L';
+                FB_ARRAY[Array_Index+10] = '\r';
+                FB_ARRAY[Array_Index+11] = '\n';
+                Array_Index+=12;
                 break;
                }
             }
@@ -373,48 +408,126 @@ char* GET_VNI_FB( uint8_t Out_index)
               switch (Out_index)
               {
               case 4:
-                condition="POWER GOOD FAIL";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+0] = 'P';
+                FB_ARRAY[Array_Index+1] = 'O';
+                FB_ARRAY[Array_Index+2] = 'W';
+                FB_ARRAY[Array_Index+3] = 'E';           
+                FB_ARRAY[Array_Index+4] = 'R';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'G';
+                FB_ARRAY[Array_Index+7] = 'O';
+                FB_ARRAY[Array_Index+8] = 'O';
+                FB_ARRAY[Array_Index+9] = 'D';           
+                FB_ARRAY[Array_Index+10] = ' ';
+                FB_ARRAY[Array_Index+11] = 'F';
+                FB_ARRAY[Array_Index+12] = 'A';
+                FB_ARRAY[Array_Index+13] = 'I';
+                FB_ARRAY[Array_Index+14] = 'L';
+                FB_ARRAY[Array_Index+15] = '\r';
+                FB_ARRAY[Array_Index+16] = '\n';
+                Array_Index+=17;
                 break;
               case 5:
-                condition="PC FAIL";
-                str_data=condition;;    
+                FB_ARRAY[Array_Index+0] = 'P';
+                FB_ARRAY[Array_Index+1] = 'C';           
+                FB_ARRAY[Array_Index+2] = ' ';
+                FB_ARRAY[Array_Index+3] = 'F';
+                FB_ARRAY[Array_Index+4] = 'A';
+                FB_ARRAY[Array_Index+5] = 'I';
+                FB_ARRAY[Array_Index+6] = 'L';
+                FB_ARRAY[Array_Index+7] = '\r';
+                FB_ARRAY[Array_Index+8] = '\n';
+                Array_Index+=9;  
                 break;
               case 6:
-               condition="TWARN FAIL"; 
-                str_data=condition;;
+                FB_ARRAY[Array_Index+0] = 'T';
+                FB_ARRAY[Array_Index+1] = 'W';           
+                FB_ARRAY[Array_Index+2] = 'A';
+                FB_ARRAY[Array_Index+3] = 'R';
+                FB_ARRAY[Array_Index+4] = 'N';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'F';
+                FB_ARRAY[Array_Index+7] = 'A';
+                FB_ARRAY[Array_Index+8] = 'I';
+                FB_ARRAY[Array_Index+9] = 'L';
+                FB_ARRAY[Array_Index+10] = '\r';
+                FB_ARRAY[Array_Index+11] = '\n';
+                Array_Index+=12;
                 break;
               case 7:
-                condition="DC/DC OK";
-                str_data=condition;;
+                FB_ARRAY[Array_Index+0] = 'D';
+                FB_ARRAY[Array_Index+1] = 'C';           
+                FB_ARRAY[Array_Index+2] = '/';
+                FB_ARRAY[Array_Index+3] = 'D';
+                FB_ARRAY[Array_Index+4] = 'C';
+                FB_ARRAY[Array_Index+5] = ' ';
+                FB_ARRAY[Array_Index+6] = 'O';
+                FB_ARRAY[Array_Index+7] = 'K';
+                FB_ARRAY[Array_Index+8] = '\r';
+                FB_ARRAY[Array_Index+9] = '\n';
+                Array_Index+=10;
                 break;
-
-              }
-              
+              }              
             }
 
- return str_data;
+
 }
 
+/** 
+  * @brief:     Get CLT01 IC status
+  * @param:     Output index
+*/
 
-char* GET_CLT_FB( uint8_t Out_index)
+void GET_CLT_FB( uint8_t Out_index)
 {
- 
-    char* condition=NULL;
-    char* str_data=NULL;
+
                
            device_FB=(FB_Data1[0]>>Out_index+6)&0x01; 
+//      device_FB=0;//TEST
             if(device_FB==0)
             {
               switch (Out_index)
               {
                 case 0:
-                  condition="TEMPERATURE FAIL";
-                  str_data=condition;
+                FB_ARRAY[Array_Index+0] = 'T';
+                FB_ARRAY[Array_Index+1] = 'E';
+                FB_ARRAY[Array_Index+2] = 'M';
+                FB_ARRAY[Array_Index+3] = 'P';           
+                FB_ARRAY[Array_Index+4] = 'E';
+                FB_ARRAY[Array_Index+5] = 'R';
+                FB_ARRAY[Array_Index+6] = 'A';
+                FB_ARRAY[Array_Index+7] = 'T';
+                FB_ARRAY[Array_Index+8] = 'U';
+                FB_ARRAY[Array_Index+9] = 'R';           
+                FB_ARRAY[Array_Index+10] = 'E';
+                FB_ARRAY[Array_Index+11] = ' ';
+                FB_ARRAY[Array_Index+12] = 'F';
+                FB_ARRAY[Array_Index+13] = 'A';
+                FB_ARRAY[Array_Index+14] = 'I';
+                FB_ARRAY[Array_Index+15] = 'L';
+                FB_ARRAY[Array_Index+16] = '\r';
+                FB_ARRAY[Array_Index+17] = '\n';
+                Array_Index+=18;
                   break;
-                case 1:                
-                  condition="POWER GOOD FAIL";
-                  str_data=condition;
+                case 1:    
+                  FB_ARRAY[Array_Index+0] = 'P';
+                  FB_ARRAY[Array_Index+1] = 'O';
+                  FB_ARRAY[Array_Index+2] = 'W';
+                  FB_ARRAY[Array_Index+3] = 'E';           
+                  FB_ARRAY[Array_Index+4] = 'R';
+                  FB_ARRAY[Array_Index+5] = ' ';
+                  FB_ARRAY[Array_Index+6] = 'G';
+                  FB_ARRAY[Array_Index+7] = 'O';
+                  FB_ARRAY[Array_Index+8] = 'O';
+                  FB_ARRAY[Array_Index+9] = 'D';           
+                  FB_ARRAY[Array_Index+10] = ' ';
+                  FB_ARRAY[Array_Index+11] = 'F';
+                  FB_ARRAY[Array_Index+12] = 'A';
+                  FB_ARRAY[Array_Index+13] = 'I';
+                  FB_ARRAY[Array_Index+14] = 'L';
+                  FB_ARRAY[Array_Index+15] = '\r';
+                  FB_ARRAY[Array_Index+16] = '\n';
+                  Array_Index+=17;
                   break;
               }
               
@@ -424,18 +537,45 @@ char* GET_CLT_FB( uint8_t Out_index)
               switch (Out_index)
               {
                 case 0:
-                  condition="TEMPERATURE OK";
-                  str_data=condition;
+                FB_ARRAY[Array_Index+0] = 'T';
+                FB_ARRAY[Array_Index+1] = 'E';
+                FB_ARRAY[Array_Index+2] = 'M';
+                FB_ARRAY[Array_Index+3] = 'P';           
+                FB_ARRAY[Array_Index+4] = 'E';
+                FB_ARRAY[Array_Index+5] = 'R';
+                FB_ARRAY[Array_Index+6] = 'A';
+                FB_ARRAY[Array_Index+7] = 'T';
+                FB_ARRAY[Array_Index+8] = 'U';
+                FB_ARRAY[Array_Index+9] = 'R';           
+                FB_ARRAY[Array_Index+10] = 'E';
+                FB_ARRAY[Array_Index+11] = ' ';
+                FB_ARRAY[Array_Index+12] = 'O';
+                FB_ARRAY[Array_Index+13] = 'K';
+                FB_ARRAY[Array_Index+14] = '\r';
+                FB_ARRAY[Array_Index+15] = '\n';
+                Array_Index+=16;
                   break;
                 case 1:
-                  condition="POWER GOOD OK";
-                  str_data=condition;;    
-                  break;
+                  FB_ARRAY[Array_Index+0] = 'P';
+                  FB_ARRAY[Array_Index+1] = 'O';
+                  FB_ARRAY[Array_Index+2] = 'W';
+                  FB_ARRAY[Array_Index+3] = 'E';           
+                  FB_ARRAY[Array_Index+4] = 'R';
+                  FB_ARRAY[Array_Index+5] = ' ';
+                  FB_ARRAY[Array_Index+6] = 'G';
+                  FB_ARRAY[Array_Index+7] = 'O';
+                  FB_ARRAY[Array_Index+8] = 'O';
+                  FB_ARRAY[Array_Index+9] = 'D';           
+                  FB_ARRAY[Array_Index+10] = ' ';
+                  FB_ARRAY[Array_Index+11] = 'O';
+                  FB_ARRAY[Array_Index+12] = 'K'; 
+                  FB_ARRAY[Array_Index+13] = '\r';
+                  FB_ARRAY[Array_Index+14] = '\n'; 
+                  Array_Index+=15; 
+                 break;
               }
-              
             }
 
- return str_data;
 }
 
 

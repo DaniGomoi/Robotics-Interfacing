@@ -84,7 +84,10 @@ uint16_t ToISOPLC =0;
 uint8_t ToSPI=0;
 uint8_t ToIPS=0;
 uint8_t Output_Index=0;
+volatile uint16_t Array_Index=0;
 uint16_t* param_array;
+char FB_ARRAY[300];
+
 char* var;
 bool RX_ClientFrame=WIFI_FALSE;
 bool client_connection=WIFI_FALSE;
@@ -131,7 +134,7 @@ extern UART_HandleTypeDef UartHandle,UartMsgHandle;
 extern char print_msg_buff[512];
 extern char UserDataBuff[];
 extern uint8_t output_buffer,VNI_SPI;
-
+extern int8_t POG;
 /**
   * @}  // end Exported_variables 
   */
@@ -193,7 +196,9 @@ HAL_Init();
   /* configure the timers  */
       
   GPIO_Config();
+#if (defined PLC01A1) || (defined PLC01A1_OUT01A1)
   SPI1_Config();
+#endif
   UART_Configuration();
   Timer_Config( );  
   
@@ -228,6 +233,12 @@ HAL_Init();
     return 0;
   }
  
+
+   
+    Init_Output();
+    ClearFlag_ResetOUT();
+    
+#if (defined PLC01A1) || (defined PLC01A1_OUT01A1)  
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_RESET);//CS1 watchdog refresh
   /* Delfault driving pin configuration for VNI */
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET); //CS pin
@@ -236,23 +247,19 @@ HAL_Init();
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//CS1 watchdog refresh
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_RESET);//CS1 watchdog refresh
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//CS1 watchdog refresh
-   
-    Init_Output();
-    ClearFlag_ResetOUT();
     BSP_RELAY_EN_Out();
     BSP_RELAY_SetOutputs(&ToSPI);
     PLC_State=PLC_RESET;
     CLT_State=Unchecked;
+#endif
     Frame_decoding=Completed;
-    
+
   while (1)
   {  
-
-    
-    
-    do{ 
+ 
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET); 
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET); 
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+
       switch (wifi_state) 
         {
         case wifi_state_reset:
@@ -288,13 +295,7 @@ HAL_Init();
         break;
 
         case wifi_state_write:
-          
-             if(Get_FlagStatus()==1)
-              {
-                Get_FeedbackICs();                               
-                Reset_FlagStatus();
-              }
-             else
+
                WiFiServer_Answer((uint8_t*)answer);
           
           wifi_state = wifi_state_idle;
@@ -315,17 +316,22 @@ HAL_Init();
        
         if(WiFi_Decode (rung_conf))
           {
-              if(Get_FlagStatus()==1)
+#ifdef PLC01A1_OUT01A1       
+            if(Get_FlagStatus()==1)
               {
+                POG=-1;
                 VNI_TxRx(ToSPI);
                 CLT_VNI_RxTx();
-                 wifi_state=  wifi_state_write;
+                Get_FeedbackICs();                               
+                Reset_FlagStatus();
+                
               }
               else
               {               
                   CLT_VNI_RxTx();
                   if(PLC_GetOutput(&ToISOPLC))
                   {
+
                             ToSPI=ToISOPLC;
                             output_status=VNI_TxRx(ToSPI);  
                             output_status=VNI_TxRx(ToSPI);  
@@ -353,35 +359,103 @@ HAL_Init();
                         Reset_Count();
                    }
                   else//recursive dependency
-                  {
+                  { Restore();
                       WiFiServer_Answer("<FAIL EXPRESSION>");
-                      Restore();
+                     
                   }  
+                  POG=-1;
               }
+#elif (defined PLC01A1)         
+            if(Get_FlagStatus()==1)
+              {
+                POG=-1;
+                VNI_TxRx(ToSPI);
+                CLT_VNI_RxTx();
+                Get_FeedbackICs();                               
+                Reset_FlagStatus();
+                
+              }
+              else
+              {               
+                  CLT_VNI_RxTx();
+                  if(PLC_GetOutput(&ToISOPLC))
+                  {
+
+                            ToSPI=ToISOPLC;
+                            output_status=VNI_TxRx(ToSPI);  
+                            output_status=VNI_TxRx(ToSPI);                
+                        if((output_status==0)&&(PLC_State==PLC_PROGRAMMED))
+                        {
+                          if(Get_ResetOUT()==1)
+                          {
+                            BSP_OutputEnable_Pin(GPIO_PIN_RESET);
+                            WiFiServer_Answer("<RESET DONE>");
+                            ClearFlag_ResetOUT();
+                          }
+                          else
+                          WiFiServer_Answer("<DONE>");                          
+                         
+                        }
+                        else
+                        {
+                          WiFiServer_Answer("<FAIL OUTPUTS>");                          
+                        }
+ 
+                        Reset_Count();
+                   }
+                  else//recursive dependency
+                  { Restore();
+                      WiFiServer_Answer("<FAIL EXPRESSION>");
+                     
+                  }  
+                  POG=-1;
+              }
+#elif (defined OUT01A1)
             
+                  if(PLC_GetOutput(&ToISOPLC))
+                  {                           
+                            BSP_ISO_Com_Settings();
+                            BSP_OutputEnable_Pin(GPIO_PIN_SET);
+                            BSP_DrivePin_GROUP(ToISOPLC);                        
+                        if(output_status==0)
+                        {
+                          if(Get_ResetOUT()==1)
+                          {
+                            BSP_OutputEnable_Pin(GPIO_PIN_RESET);
+                            WiFiServer_Answer("<RESET DONE>");
+                            ClearFlag_ResetOUT();
+                          }
+                          else
+                          WiFiServer_Answer("<DONE>");                          
+                         
+                        }
+                        else
+                        {
+                          WiFiServer_Answer("<FAIL OUTPUTS>");                          
+                        }
+ 
+                        Reset_Count();
+                   }
+                  else//recursive dependency
+                  { Restore();
+                      WiFiServer_Answer("<FAIL EXPRESSION>");
+                     
+                  }  
+                  POG=-1;
+            
+#endif
           }
           else
           {              
               WiFiServer_Answer("<FAIL SYNTAX>");
              Restore();
           }
-       
+      
        }
       else
       { 
         Board_State=BOARD_LOOP;
       }
-          
-     }while((Board_State==BOARD_LISTENING)||(Board_State==BOARD_RESET));
-
-    if(CLT_READ!=0)
-     {
-        CLT_READ=0;
-         CLT_VNI_RxTx();       
-           PLC_Polling ();
-          while(PLC_State==PLC_RESET); 
-
-     }
   }
 }
  
@@ -405,9 +479,10 @@ static void initializePlc(void)
 
 void PLC_Polling (void)
 {
-
+#ifdef PLC01A1_OUT01A1
+    CLT_VNI_RxTx(); 
     if(PLC_GetOutput(&ToISOPLC))
-    {
+    { 
         ToSPI=ToISOPLC;
         VNI_TxRx(ToSPI);
         VNI_TxRx(ToSPI); 
@@ -415,7 +490,28 @@ void PLC_Polling (void)
         BSP_ISO_Com_Settings();
         BSP_OutputEnable_Pin(GPIO_PIN_SET);
         BSP_DrivePin_GROUP(ToIPS);
-    }   
+        POG=-1;
+    } 
+#elif (defined PLC01A1)  
+     CLT_VNI_RxTx(); 
+    if(PLC_GetOutput(&ToISOPLC))
+    { 
+        ToSPI=ToISOPLC;
+        VNI_TxRx(ToSPI);
+        VNI_TxRx(ToSPI); 
+        POG=-1;
+    }      
+ 
+#elif (defined OUT01A1)
+    if(PLC_GetOutput(&ToISOPLC))
+    { 
+      
+      BSP_ISO_Com_Settings();
+      BSP_OutputEnable_Pin(GPIO_PIN_SET);
+      BSP_DrivePin_GROUP(ToISOPLC);
+      POG=-1;
+    } 
+#endif
 }
 
 
@@ -423,47 +519,56 @@ void Get_FeedbackICs (void)
 {
   
     Output_Index=0;
- 
-  WiFiServer_Answer(" DIGITAL OUTPUT FEEDBACK");
-    WiFiServer_Answer("\r\n");
+Array_Index=0;
 
-  do{
+memset(FB_ARRAY,0,'\0');
+  FB_ARRAY[0]=' '; FB_ARRAY[1]='D';FB_ARRAY[2]='I';FB_ARRAY[3]='G';FB_ARRAY[4]='I';FB_ARRAY[5]='T';FB_ARRAY[6]='A'; FB_ARRAY[7]='L';
+  FB_ARRAY[8]=' ';FB_ARRAY[9]='O';FB_ARRAY[10]='U';FB_ARRAY[11]='T';FB_ARRAY[12]='P';FB_ARRAY[13]='U';FB_ARRAY[14]='T';
+  FB_ARRAY[15]=' ';FB_ARRAY[16]='F';FB_ARRAY[17]='E';FB_ARRAY[18]='E';FB_ARRAY[19]='D';FB_ARRAY[20]='B';FB_ARRAY[21]='A';
+  FB_ARRAY[22]='C';FB_ARRAY[23]='K';FB_ARRAY[24]='\r';FB_ARRAY[25]='\n';//FB_ARRAY[26]='\0';
+
+Array_Index=26;
+  do{//vniCHANNEL
      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//watchdog
-    var= GET_VNI_OutFB(Output_Index);
-    WiFiServer_Answer((unsigned char*)var);
-     WiFiServer_Answer("\r\n");
+       FB_ARRAY[0+Array_Index]='C';FB_ARRAY[1+Array_Index]='H';FB_ARRAY[2+Array_Index]='A';FB_ARRAY[3+Array_Index]='N';FB_ARRAY[4+Array_Index]='N';FB_ARRAY[5+Array_Index]='E';FB_ARRAY[6+Array_Index]='L';
+       FB_ARRAY[7+Array_Index]=' ';
+    GET_VNI_OutFB(Output_Index);
     Output_Index++;
      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_RESET);//watchdog
 
   }while (Output_Index<8);
-  
-  Output_Index=0;  
-  
-  do{
+  Output_Index=0; 
+  do{//VNI DEVICE FB
      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//watchdog
-    var= GET_VNI_FB(Output_Index+4);
-    WiFiServer_Answer((unsigned char*)var);
-     WiFiServer_Answer("\r\n");
+    GET_VNI_FB(Output_Index+4);
     Output_Index++;
      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_RESET);//watchdog
 
-  }while (Output_Index<4);  
-  
-  Output_Index=0;
-  WiFiServer_Answer(" DIGITAL INPUT FEEDBACK"); 
-  WiFiServer_Answer("\r\n");
+  }while (Output_Index<4);
 
-  do{
+  Output_Index=0;
+  FB_ARRAY[Array_Index]=' '; FB_ARRAY[Array_Index+1]='D';FB_ARRAY[Array_Index+2]='I';FB_ARRAY[Array_Index+3]='G';FB_ARRAY[Array_Index+4]='I';FB_ARRAY[Array_Index+5]='T';FB_ARRAY[Array_Index+6]='A'; FB_ARRAY[Array_Index+7]='L';
+  FB_ARRAY[Array_Index+8]=' ';FB_ARRAY[Array_Index+9]='I';FB_ARRAY[Array_Index+10]='N';FB_ARRAY[Array_Index+11]='P';FB_ARRAY[Array_Index+12]='U';FB_ARRAY[Array_Index+13]='T';
+  FB_ARRAY[Array_Index+14]=' ';FB_ARRAY[Array_Index+15]='F';FB_ARRAY[Array_Index+16]='E';FB_ARRAY[Array_Index+17]='E';FB_ARRAY[Array_Index+18]='D';FB_ARRAY[Array_Index+19]='B';FB_ARRAY[Array_Index+20]='A';FB_ARRAY[Array_Index+21]='C';
+  FB_ARRAY[Array_Index+22]='K';FB_ARRAY[Array_Index+23]='\r';FB_ARRAY[Array_Index+24]='\n';
+  Array_Index+=25;  
+  do{//CLT DEVICE FB
     
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_SET);//watchdog
-    var= GET_CLT_FB(Output_Index);
-    WiFiServer_Answer((unsigned char*)var);
-     WiFiServer_Answer("\r\n");
+   GET_CLT_FB(Output_Index);
     Output_Index++;
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7,GPIO_PIN_RESET);//watchdog
 
-  }while (Output_Index<4);
-  WiFiServer_Answer("<DONE>");
+  }while (Output_Index<2);
+
+FB_ARRAY[Array_Index]='<';
+FB_ARRAY[Array_Index+1]='D';
+FB_ARRAY[Array_Index+2]='O';
+FB_ARRAY[Array_Index+3]='N';
+FB_ARRAY[Array_Index+4]='E';
+FB_ARRAY[Array_Index+5]='>';
+FB_ARRAY[Array_Index+6]='\0';
+WiFiServer_Answer((unsigned char*)FB_ARRAY);
 }
 
 
@@ -473,7 +578,9 @@ void WiFiServer_Answer(uint8_t* str_message)
     if(str_message!=NULL)
     {
       answer=(char*)str_message;
-      len = strlen(answer);            
+
+        len =strlen(answer);
+     
       wifi_socket_server_write(len,answer);
     }
     answer=NULL; 
@@ -507,22 +614,7 @@ void SystemClock_Config(void)
 
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
-//  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-//  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
-//  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-//  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-//  RCC_OscInitStruct.PLL.PLLM = 8;
-//  RCC_OscInitStruct.PLL.PLLN = 256;
-//  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
-//  RCC_OscInitStruct.PLL.PLLQ = 4;
-//  HAL_RCC_OscConfig(&RCC_OscInitStruct);
-//
-//  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_SYSCLK|RCC_CLOCKTYPE_PCLK1;
-//  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-//  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-//  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-//  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-//  HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2);
+
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -714,7 +806,7 @@ void SPI1_Config(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;//change the spped , old SPI_BAUDRATEPRESCALER_16
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLED;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLED;
