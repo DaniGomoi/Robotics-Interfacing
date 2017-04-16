@@ -51,10 +51,10 @@
 #define MAX_NETNUMBER                    2
 #define MASK_MSB_OUT                  0x80
 #define MASK_MSB_RES                  0x30
-#define MAX_TIM_PARAM                    5
-#define MAX_CNT_PARAM                    5
+#define MAX_PARAM                    4
 #define cnt_threshold                    6
-#define MAX_TIMER_NUMBER                 4
+#define MAX_COMPONENT_NUMBER             50
+
 /**
   * @}
   */
@@ -75,18 +75,18 @@ typedef struct
 
 typedef struct
 {
-  uint8_t  TIM_number;
+  uint16_t  TIM_number;
   uint16_t TIM_period;
   uint16_t TIM_cnt;
   uint8_t  TIM_output;
-}
+  }
 TimerStruct_Typedef;
 
 typedef struct
 {
-  uint8_t CNT_number;
+  uint16_t CNT_number;
   uint8_t CNT_dir;
-  uint8_t CNT_val;
+  uint16_t CNT_val;
   uint8_t CNT_output;
 }
 CounterStruct_Typedef;

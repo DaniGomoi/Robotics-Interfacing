@@ -73,7 +73,6 @@ extern uint8_t Input_CHS;
 extern int8_t  ServerData_RX[]; 
 extern Decode_Status_Typedef Frame_decoding;
 extern PLC_State_TypeDef PLC_State;
-
 extern TIM_HandleTypeDef htim2,htim1,htim,htim4;
 /**
   * @}
@@ -86,39 +85,35 @@ extern TIM_HandleTypeDef htim2,htim1,htim,htim4;
 int8_t check_status=-1;
 uint8_t argument=0;
 uint8_t decode=0;
-uint8_t CLT_Device=0x36; //  CLT frame
 uint16_t dec_index=0;
 uint8_t output_buffer=0;
 uint8_t decoded_index=0;
-uint8_t line_index=0; //wififrame
-uint8_t element_index=0;//decode single output
-uint8_t res_index=0; // index result single operation
+uint8_t element_index=0;
+uint8_t res_index=0; 
 uint8_t rung_pos=0;
 uint8_t index=0;
-uint8_t ret_log[16]={0};
 uint8_t reset_request=0;
 uint8_t var_tim=0;
-uint16_t cnt1[4]={0};
-uint8_t test1,test2,test3=0;
-uint8_t num_obj[4]={255,255,255,255};
-uint16_t delay_CNT[4]={0};
-int8_t objects1=-1;
-int8_t objects2=1;
+uint16_t cnt1[MAX_COMPONENT_NUMBER];
+uint16_t num_obj[MAX_COMPONENT_NUMBER];             /*!< number of object to count*/
+uint8_t start_delay[MAX_COMPONENT_NUMBER]={0};      /*!< flag used to start the counter delay of 5 sec*/
+uint16_t delay_CNT[MAX_COMPONENT_NUMBER]={0};
+int8_t objects1[MAX_COMPONENT_NUMBER];              /*!< flag set when one object has been counted in up-count*/
+int8_t objects2[MAX_COMPONENT_NUMBER];               /*!< flag set when one object has been counted in down-count*/
 uint16_t component_index=0;
 uint16_t comp_param[4];
-uint8_t timer_1[4]={0,0,0,0};
-uint8_t timer_2=0;
-uint8_t out_tim[4]={0,0,0,0};
+uint8_t timer_1[MAX_COMPONENT_NUMBER];
+uint8_t htim4_idx,htim1_idx=0;
+uint8_t out_tim[MAX_COMPONENT_NUMBER];
 uint8_t index_t,index_c=0;
 uint8_t Component[512];
-XNUCLEO_TypeDef  board_type=X_NUCLEO_PLC;
-uint8_t element_buffer[EXPRESSION_MAX_SIZE];  
-uint8_t counter1,counter2=0;
-uint8_t cnt1TH=255;
-uint8_t cnt2TH=255;
- uint8_t timer1_cnt=0;
- uint8_t timer2_cnt=0;
- int8_t POG=-1;
+
+uint8_t element_buffer[EXPRESSION_MAX_SIZE];
+uint8_t cnt1TH=255;                                  /*!< delay timer1 value threshold*/
+uint8_t cnt2TH=255;                                  /*!< delay timer2 value threshold*/
+ uint8_t timer1_cnt=0;                               /*!< flag set when timer1 count reach  cnt1TH threshold*/
+ uint8_t timer2_cnt=0;                               /*!< flag set when timer4 count reach  cnt2TH threshold*/
+ int8_t POG=-1;                                      /*!< flag set when prugromming expression is ongoing*/
 /**
   * @}
   */
@@ -129,9 +124,8 @@ uint8_t cnt2TH=255;
   */
 OutputStructure_Typedef         output[MAX_OUTPUT_NUMBER];
 OutputStructure_Typedef         output_temp[MAX_OUTPUT_NUMBER];
-TimerStruct_Typedef             tim_setting[MAX_TIM_PARAM];
-CounterStruct_Typedef           counter_up[MAX_CNT_PARAM];
-
+TimerStruct_Typedef             tim_setting[MAX_COMPONENT_NUMBER];
+CounterStruct_Typedef           counter_up[MAX_COMPONENT_NUMBER];
 /**
   * @}
   */
@@ -157,14 +151,28 @@ void Init_Output(void)
       }
        memset(Component,0,512);
        memset(comp_param,0,4);
-       memset(timer_1,0,4);
-       memset(num_obj,0,4);
+       memset(timer_1,0,MAX_COMPONENT_NUMBER);
+       memset(num_obj,0,MAX_COMPONENT_NUMBER);
+     //  memset(cnt1,1,MAX_COMPONENT_NUMBER);
        HAL_TIM_Base_Stop_IT(&htim1);
        HAL_TIM_Base_Stop_IT(&htim4);
        Reset_Count();
        htim1.Instance->CNT=0;
        htim4.Instance->CNT=0;
-       
+       for(uint8_t i=0;i<MAX_COMPONENT_NUMBER;i++)
+       {
+         tim_setting[i].TIM_cnt=0;
+         tim_setting[i].TIM_number=0;
+         tim_setting[i].TIM_output=0;
+         tim_setting[i].TIM_period=0;
+         counter_up[i].CNT_dir=0;
+         counter_up[i].CNT_number=0;
+         counter_up[i].CNT_output=0;
+         counter_up[i].CNT_val=0;
+         num_obj[i]=0;
+         cnt1[i]=1;
+         
+       }
       reset_request=1;
  
 }
@@ -220,27 +228,17 @@ void Restore (void)
 }
 
 
-
-XNUCLEO_TypeDef Get_Board_Name (void)
-{
-  
-  return board_type;
-}
-
-
-
-
 /** 
     @brief: Routine used to decode the WiFi incoming frame
     @param: WiFi incoming frame
+    @retval: decoding result
 */
 
 int16_t WiFi_Decode (uint8_t* frame)   /*decode the single line in terms of logic operator and channel number*/
 {
    int16_t ret_decode=0;
    uint8_t decoding_event=-1;
-
- //  int8_t tim_ret=-1;
+   
    if(Frame_decoding!=Started)
    {
       Frame_decoding=Started; 
@@ -433,7 +431,7 @@ int16_t WiFi_Decode (uint8_t* frame)   /*decode the single line in terms of logi
 
 /** 
     @brief: Component parser to get param value related to Timer and Counter
-    @param: WiFi incoming frame
+    @retval: parser status
 */
 uint8_t Component_parser(void)
 {
@@ -443,9 +441,12 @@ uint8_t Component_parser(void)
   index_t=0;
   index_c=0; 
   component_index=0;
+  
+  memset(comp_param,0,5);
 
-  memset(comp_param,0,4);
+//  memset(counter_up,0,5);
 
+  
     do 
     {
        if(( Component[component_index]!='T')&&( Component[component_index]!='C'))
@@ -480,7 +481,7 @@ uint8_t Component_parser(void)
                           {
                             cnt2TH=tim_setting[index_t].TIM_cnt;
                           }
-                        index_t++;
+//                        index_t++;
                      }
                      else
                      {
@@ -494,7 +495,7 @@ uint8_t Component_parser(void)
                            
                            if(counter_up[index_c].CNT_dir==0)
                              num_obj[index_c]=counter_up[index_c].CNT_val;
-                           index_c++;
+//                           index_c++;
                          }
                      }
                   
@@ -534,15 +535,15 @@ uint8_t Evalute_Expression(uint8_t output_index)
   
   
   memset(element_buffer,0,EXPRESSION_MAX_SIZE);
-  test1=0;
+
   if(output[output_index].output_value==-1)
   {
     while((argument=output[output_index].Expression[index++])!=0)
     {               
       if((argument=='*') && (res_index > 1))
-      {test1=1;
-      Get_AND ( element_buffer, res_index);
-      res_index--;
+      {
+        Get_AND ( element_buffer, res_index);
+        res_index--;
       } 
       else if((argument=='+') && (res_index > 1))
       { 
@@ -568,176 +569,190 @@ uint8_t Evalute_Expression(uint8_t output_index)
       
       else                
       {
-        if(argument & MASK_MSB_OUT)// se l'ingresso e` input o output
+        if(argument & MASK_MSB_OUT)// used to evaluate if an output is used as input
         {
           uint8_t output_pos=(argument&0x1F)-1;
-          if(output[output_pos].output_value!=-1) // se l'uscita e` stata valutata
+          if(output[output_pos].output_value!=-1) // check if an output has been evaluated or not
           {             
             if(output_pos<16)            
               element_buffer[res_index++]=output[output_pos].output_value;
             else
-            {index_t=0;
-            while(((tim_setting[index_t].TIM_output)!=(output_pos+1))&&(index_t<MAX_TIMER_NUMBER))
-            {
-              index_t++;
-            }
-            
-            if(tim_setting[index_t].TIM_number!=0)
-            {
-              if(output[output_pos].output_value==1)
-              {
-                
-                if(timer_1[index_t]==0)
-                { 
-                  timer_1[index_t]=1;
-                  if(tim_setting[index_t].TIM_number==1)
-                  {
-                    HAL_TIM_Base_Start_IT(&htim1);
-                  }
-                  else if(tim_setting[index_t].TIM_number==2)
-                  {
-                    HAL_TIM_Base_Start_IT(&htim4);                                      
-                  }
-                }
-                
-                if(tim_setting[index_t].TIM_number==1)
                 {
-                  if(timer1_cnt==0)
+                  index_t=0;
+                  while(((tim_setting[index_t].TIM_output)!=(output_pos+1))&&(index_t<(MAX_COMPONENT_NUMBER-1)))
                   {
-                    element_buffer[res_index++]=out_tim[index_t];
+                    index_t++;
                   }
-                  else
-                  { 
-                    if(timer1_cnt==1)
-                    {
-                      timer1_cnt=0;
-                    }                        
-                    
-                    cnt1[index_t]=0;
-                    out_tim[index_t]^=0x01;
-                    element_buffer[res_index++]=out_tim[index_t]; 
-                    
-                  }
-                }
-                else if(tim_setting[index_t].TIM_number==2)
-                {
-                  if(timer2_cnt==0)
+                  
+                  if(tim_setting[index_t].TIM_number!=0)
                   {
-                    element_buffer[res_index++]=out_tim[index_t];
-                  }
-                  else
-                  { 
-                    if(timer2_cnt==1)
+                    if(output[output_pos].output_value==1)
                     {
-                      timer2_cnt=0;
-                    }                        
-                    
-                    cnt1[index_t]=0;
-                    out_tim[index_t]^=0x01;
-                    element_buffer[res_index++]=out_tim[index_t]; 
-                    
-                  }
-                }
-                
-              }                     
-              else
-              {
-                if(timer_1[index_t]==1)
-                {
-                  timer_1[index_t]=0;
-                  cnt1[index_t]=0;                           
-                  out_tim[index_t]=0;
-                  if(tim_setting[index_t].TIM_number==1)
-                    HAL_TIM_Base_Stop_IT(&htim1);
-                  else
-                    HAL_TIM_Base_Stop_IT(&htim4); 
-                }
-                element_buffer[res_index++]=output[output_pos].output_value;
-              }
-            }
-            else
-            { 
-              index_c=0;       
-              while((counter_up[index_c].CNT_output!=output_pos+1)&&index_c<MAX_TIMER_NUMBER)
-              {
-                index_c++;
-              }
-              if(counter_up[index_c].CNT_number!=0)
-              {        
-                if(counter_up[index_c].CNT_dir==1)
-                {
-                  if(num_obj[index_c]==counter_up[index_c].CNT_val)
-                  {
-                    
-                    element_buffer[res_index++]=1;
-                    if(delay_CNT[index_c]>=5000)
-                    {
-                      element_buffer[res_index++]=0;
-                      ToAnalizeCounterIN();
-                      objects1=-1;
-                    }
-                  }
-                  else
-                  {
-                    delay_CNT[index_c]=0;                   
-                    if(output[output_pos].output_value==1) 
-                    {
-                      if(objects1==-1)
+                      if(tim_setting[index_t].TIM_cnt!=0)
                       {
-                        objects1=1;
-                        num_obj[index_c]++;
-                      } 
+                        if(timer_1[index_t]==0)
+                        { 
+                          timer_1[index_t]=1;
+                          
+                          
+                          if(tim_setting[index_t].TIM_number==1)
+                          {
+                            HAL_TIM_Base_Start_IT(&htim1);
+                            htim1_idx=index_t;
+                          }
+                          else if(tim_setting[index_t].TIM_number>1)
+                          {
+                            htim4_idx=index_t;
+                            HAL_TIM_Base_Start_IT(&htim4);                                      
+                          }
+                        }
+                        if(tim_setting[index_t].TIM_number==1)
+                        {
+                          if(timer1_cnt==0)
+                          {
+                            element_buffer[res_index++]=out_tim[index_t];
+                          }
+                          else
+                          { 
+                            if(timer1_cnt==1)
+                            {
+                              timer1_cnt=0;
+                            }                        
+                            
+                            cnt1[index_t]=1;
+                            out_tim[index_t]^=0x01;
+                            element_buffer[res_index++]=out_tim[index_t]; 
+                            
+                          }
+                        }
+                        else if(tim_setting[index_t].TIM_number>1)
+                        {
+                          if(timer2_cnt==0)
+                          {
+                            element_buffer[res_index++]=out_tim[index_t];
+                          }
+                          else
+                          { 
+                            if(timer2_cnt==1)
+                            {
+                              timer2_cnt=0;
+                            }                        
+                            
+                            cnt1[index_t]=1;
+                            out_tim[index_t]^=0x01;
+                            element_buffer[res_index++]=out_tim[index_t]; 
+                            
+                          }
+                        }
+                      }
+                      else
+                      {
+                        out_tim[index_t]=0x01;
+                        element_buffer[res_index++]=out_tim[index_t];
+                      }
                     }
                     else
-                      
                     {
-                      objects1=-1;
-                      
+                      if(timer_1[index_t]==1)
+                      {
+                        timer_1[index_t]=0;
+                        cnt1[index_t]=0;                           
+                        out_tim[index_t]=0;
+                        if(tim_setting[index_t].TIM_number==1)
+                          HAL_TIM_Base_Stop_IT(&htim1);
+                        else
+                          HAL_TIM_Base_Stop_IT(&htim4); 
+                      }
+                      element_buffer[res_index++]=output[output_pos].output_value;
                     }
-                    
-                    element_buffer[res_index++]=0;
-                  }
-                  index_c=0;
-                } 
+                                        
+                }
                 else
-                {
-                  if(num_obj[index_c]==0)
+                { 
+                  index_c=0;       
+                  while((counter_up[index_c].CNT_output!=output_pos+1)&&index_c<(MAX_COMPONENT_NUMBER-1))
                   {
-                    
-                    element_buffer[res_index++]=1;
-                    
-                    if(delay_CNT[index_c]>=5000)
-                    {
-                      element_buffer[res_index++]=0;
-                      num_obj[index_c]=counter_up[index_c].CNT_val;
-                      objects2=-1;
-                    }
+                    index_c++;
                   }
-                  else
-                  {
-                    delay_CNT[index_c]=0;                    
-                    if(output[output_pos].output_value==1) 
+                  if(counter_up[index_c].CNT_number!=0)
+                  {        
+                    if(counter_up[index_c].CNT_dir==1)
                     {
-                      if(objects2==-1)
+                      if(num_obj[index_c]==counter_up[index_c].CNT_val)
                       {
-                        objects2=1;
-                        num_obj[index_c]--;
-                      } 
-                    }
+                        start_delay[index_c]=1;
+                        element_buffer[res_index++]=1;
+                        if(delay_CNT[index_c]>=5000)
+                        {
+                          element_buffer[res_index++]=0;
+                          ToAnalizeCounterIN();
+                          objects1[index_c]=-1;
+                        }
+                      }
+                      else
+                      {
+                         start_delay[index_c]=0;
+                        delay_CNT[index_c]=0;                   
+                        if(output[output_pos].output_value==1) 
+                        {
+                          if(objects1[index_c]==-1)
+                          {
+                            objects1[index_c]=1;
+                            num_obj[index_c]++;
+                          } 
+                        }
+                        else
+                          
+                        {
+                          objects1[index_c]=-1;
+                          
+                        }
+                        
+                        element_buffer[res_index++]=0;
+                      }
+                      index_c=0;
+                    } 
                     else
                     {
-                      objects2=-1;
-                      
+                      if(num_obj[index_c]==0)
+                      {
+                        start_delay[index_c]=1;
+                        element_buffer[res_index++]=1;
+                        
+                        if(delay_CNT[index_c]>=5000)
+                        { 
+                          
+                          element_buffer[res_index++]=0;
+                          num_obj[index_c]=counter_up[index_c].CNT_val;
+                          objects2[index_c]=-1;
+                        }
+                      }
+                      else
+                      {
+                        start_delay[index_c]=0;
+                        delay_CNT[index_c]=0;                    
+                        if(output[output_pos].output_value==1) 
+                        {
+                          if(objects2[index_c]==-1)
+                          {
+                            objects2[index_c]=1;
+                            num_obj[index_c]--;
+                          } 
+                        }
+                        else
+                        {
+                          objects2[index_c]=-1;
+                          
+                        }
+                        
+                        element_buffer[res_index++]=0; 
+                        
+                      }
+                      index_c=0;
                     }
-                    
-                    element_buffer[res_index++]=0; 
-                    
                   }
-                  index_c=0;
                 }
-              }
-            }
-            }
+                }
           }
           else
           {
@@ -755,8 +770,7 @@ uint8_t Evalute_Expression(uint8_t output_index)
     
     if((ret==-1)&&(res_index==1))//exspression evaluation correct, only correct stack
     {
-      
-      test2=1;
+
       output[output_index].output_value=element_buffer[0];
       ret=Get_Next(output_index);
     }
@@ -787,13 +801,13 @@ void ToAnalizeCounterIN (void)
   
   while(exp_idx<EXPRESSION_MAX_SIZE)
   {
-    while( ((output[counter_up[index_c].CNT_output-1].Expression[exp_idx]&0x7F)!=tim_setting[i].TIM_output)&&(i<=MAX_TIMER_NUMBER))
+    while( ((output[counter_up[index_c].CNT_output-1].Expression[exp_idx]&0x7F)!=tim_setting[i].TIM_output)&&(i<=MAX_COMPONENT_NUMBER))
     {
       i++   ; 
     }
     exp_idx++;
   }
-  if(i<=MAX_TIMER_NUMBER)
+  if(i<=MAX_COMPONENT_NUMBER)
   {
     cnt1[i]=0;
     num_obj[index_c]=0;    
@@ -856,38 +870,6 @@ uint8_t Get_Next(uint8_t current)
 */
 
 
-//uint8_t* Send_Programming_Log() 
-//{
-//    uint8_t out_ch=1;
-//
-//    memset(ret_log,0x00,(2*MAX_OUTPUT_NUMBER));
-//
-//        if(PLC_State==PLC_PROGRAMMED)
-//        {
-//          for(uint8_t i=0;i<(2*MAX_OUTPUT_NUMBER);i++)
-//          {
-//            ret_log[i]=out_ch+0x30;
-//            out_ch--;
-//            ret_log[i+1]=(output[out_ch++].Programmed)+0x30;
-//            out_ch++;
-//            i++;
-//           
-//          }
-//        }
-//        else
-//        {
-//          for(uint16_t del=0; del<2*MAX_OUTPUT_NUMBER; del++)
-//            {
-//                ret_log[del]=out_ch+0x30;
-//                out_ch--;
-//                ret_log[del+1]=0x30;
-//                out_ch+=2;
-//                del++;
-//            }
-//  
-//        }
-//return &ret_log[0];
-//}
 
 
 /** 
@@ -930,7 +912,7 @@ POG=1;
     output[b].output_value=-1;
   }
 
-   while((To_Evaluated()>0)&&(cycling<=80) && (next != -1))
+   while((To_Evaluated()>0)&&(cycling<=60) && (next != -1))
     {
       next=Evalute_Expression(next);//call expression evaluation
       cycling++;      
@@ -960,7 +942,7 @@ POG=1;
         }
 
     }
-POG=-1;
+//POG=-1;
  return ret_spi;
 }
 
