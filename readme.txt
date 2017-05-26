@@ -1,4 +1,4 @@
-Snap7 Package 1.4
+Snap7 Interfacing Tool
 
 The files deployed differs only for their compression method, their content is the same.
 
